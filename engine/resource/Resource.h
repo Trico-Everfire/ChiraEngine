@@ -22,7 +22,7 @@ class Resource {
 public:
     explicit Resource(std::string identifier_) : identifier(std::move(identifier_)) {}
     virtual ~Resource();
-    virtual void compile(const byte /*buffer*/[], std::size_t /*bufferLength*/) {}
+    virtual void compile(const byte /*buffer*/[], std::size_t /*bufferLength*/) = 0;
     [[nodiscard]] std::string_view getIdentifier() const {
         return this->identifier;
     }
