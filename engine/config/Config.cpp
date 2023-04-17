@@ -3,6 +3,7 @@
 #include <core/Platform.h>
 #ifdef CHIRA_PLATFORM_WINDOWS
     #define WIN32_LEAN_AND_MEAN
+    #define _CRT_SECURE_NO_WARNINGS // NOLINT(bugprone-reserved-identifier)
     #include <Windows.h>
     #include <shellapi.h>
 #else // Should work on any other platform besides Windows? macOS and Linux work at least
