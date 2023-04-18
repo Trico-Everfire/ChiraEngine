@@ -2,12 +2,12 @@
 
 #include <array>
 
-#include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_sdl2.h>
-#include <glad/gl.h>
-#include <glad/glversion.h>
+#include <backends/imgui_impl_vulkan.h>
 #include <imgui.h>
 #include <SDL.h>
+#include <SDL_vulkan.h>
+#include <vulkan/vulkan.hpp>
 
 #include <config/Config.h>
 #include <config/ConEntry.h>
@@ -28,55 +28,67 @@ using namespace chira;
 CHIRA_CREATE_LOG(WINDOW);
 
 static void setVSync(bool enable) {
+    // todo(vk)
+    /*
     if (!enable) {
         SDL_GL_SetSwapInterval(0);
     } else if (SDL_GL_SetSwapInterval(-1) == -1) {
         // Fall back to regular vsync if we don't have adaptive vsync
         SDL_GL_SetSwapInterval(1);
     }
+    */
 }
 
 ConVar win_vsync{"win_vsync", true, "Limit the FPS to your monitor's resolution.", CON_FLAG_CACHE, [](ConVar::CallbackArg newValue) {
-    ::setVSync(static_cast<bool>(std::stoi(newValue.data())));
+    setVSync(static_cast<bool>(std::stoi(newValue.data())));
 }};
 
 [[maybe_unused]]
 ConVar input_raw_mouse_motion{"input_raw_mouse_motion", true, "Get more accurate mouse motion.", CON_FLAG_CACHE};
 
 Renderer::FrameBufferHandle WINDOW_FRAMEBUFFER_HANDLE{};
-SDL_Window* SPLASHSCREEN = nullptr;
-void* GL_CONTEXT = nullptr;
 
 namespace {
 
-void setImGuiConfigPath() {
-    static std::string configPath = Config::getConfigFile("imgui.ini");
-    ImGui::GetIO().IniFilename = configPath.c_str();
+inline void resizeCurrentWindowFrameBuffer(int width, int height) {
+    Renderer::recreateFrameBuffer(&WINDOW_FRAMEBUFFER_HANDLE, width, height, WrapMode::REPEAT, WrapMode::REPEAT, FilterMode::LINEAR, true);
 }
 
-void initImGui(SDL_Window* window, void* context) {
-    ImGui_ImplSDL2_InitForOpenGL(window, context);
-    ImGui_ImplOpenGL3_Init(GL_VERSION_STRING.data());
+void setImGuiConfigPath() {
+    static std::string configPath = Config::getConfigFile("imgui.ini");
+    // todo(vk)
+    // ImGui::GetIO().IniFilename = configPath.c_str();
+}
+
+void initImGui(SDL_Window* window) {
+    // todo(vk)
+    //ImGui_ImplSDL2_InitForVulkan(window);
+    //ImGui_ImplVulkan_Init();
 }
 
 void startImGuiFrame(SDL_Window* window) {
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL2_NewFrame(window);
-    ImGui::NewFrame();
-    ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), ImGuiDockNodeFlags_AutoHideTabBar | ImGuiDockNodeFlags_PassthruCentralNode);
+    // todo(vk)
+    //ImGui_ImplVulkan_NewFrame();
+    //ImGui_ImplSDL2_NewFrame(window);
+    //ImGui::NewFrame();
+    //ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), ImGuiDockNodeFlags_AutoHideTabBar | ImGuiDockNodeFlags_PassthruCentralNode);
 }
 
 void endImGuiFrame() {
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    // todo(vk)
+    //ImGui::Render();
+    //ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData());
 }
 
 void destroyImGui() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+    // todo(vk)
+    //ImGui_ImplVulkan_Shutdown();
+    //ImGui_ImplSDL2_Shutdown();
 }
 
 } // namespace
+
+SDL_Window* SPLASHSCREEN = nullptr;
 
 bool Device::initBackendAndCreateSplashscreen(bool splashScreenVisible) {
     static bool alreadyRan = false;
@@ -84,7 +96,7 @@ bool Device::initBackendAndCreateSplashscreen(bool splashScreenVisible) {
         return false;
     alreadyRan = true;
 
-    if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_GAMECONTROLLER)) {
+    if (SDL_Init(SDL_INIT_EVENTS | SDL_INIT_GAMECONTROLLER | SDL_INIT_VIDEO)) {
         LOG_WINDOW.error("SDL failed to initialize! Error: {}", SDL_GetError());
         return false;
     }
@@ -94,14 +106,21 @@ bool Device::initBackendAndCreateSplashscreen(bool splashScreenVisible) {
     SDL_SetHintWithPriority(SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2", SDL_HINT_OVERRIDE);
 #endif
 
+    if (SDL_Vulkan_LoadLibrary(nullptr)) {
+        LOG_WINDOW.error("Failed to load Vulkan! Error: {}", SDL_GetError());
+        return false;
+    }
+
     int windowFlags =
-            SDL_WINDOW_OPENGL |
+            SDL_WINDOW_VULKAN |
             SDL_WINDOW_ALLOW_HIGHDPI |
             SDL_WINDOW_ALWAYS_ON_TOP |
             SDL_WINDOW_BORDERLESS |
             (splashScreenVisible ? SDL_WINDOW_SHOWN : SDL_WINDOW_HIDDEN);
     int width = 640, height = 480;
 
+    // todo(vk)
+    /*
     SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
@@ -109,50 +128,29 @@ bool Device::initBackendAndCreateSplashscreen(bool splashScreenVisible) {
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    */
 
-    SPLASHSCREEN = SDL_CreateWindow("Loading...", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, windowFlags);
+    // todo(config): this should use the game name
+    SPLASHSCREEN = SDL_CreateWindow("Chira Engine - Loading", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, windowFlags);
     if (!SPLASHSCREEN) {
         LOG_WINDOW.error("Splashscreen window creation failed! Error: {}", SDL_GetError());
         return false;
     }
 
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, GL_VERSION_MAJOR);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, GL_VERSION_MINOR);
-
-    int glContextFlags;
-    SDL_GL_GetAttribute(SDL_GL_CONTEXT_FLAGS, &glContextFlags);
-    glContextFlags |= SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG;
-#ifdef DEBUG
-    glContextFlags |= SDL_GL_CONTEXT_DEBUG_FLAG;
-#endif
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, glContextFlags);
-
-    GL_CONTEXT = SDL_GL_CreateContext(SPLASHSCREEN);
-    if (!GL_CONTEXT) {
-        LOG_WINDOW.error("Splashscreen window context creation failed! Error: {}", SDL_GetError());
-        return false;
-    }
-    if (!gladLoadGL((GLADloadfunc) SDL_GL_GetProcAddress)) {
-        LOG_WINDOW.error("{} must be available to run this program!", GL_VERSION_STRING_PRETTY);
-        return false;
-    }
-    if (SDL_GL_MakeCurrent(SPLASHSCREEN, GL_CONTEXT)) {
-        LOG_WINDOW.error("Splashscreen window context failed to be made current! Error: {}", SDL_GetError());
-        return false;
-    }
     setVSync(win_vsync.getValue<bool>());
 
     Renderer::pushFrameBuffer(WINDOW_FRAMEBUFFER_HANDLE);
-    Renderer::recreateFrameBuffer(&WINDOW_FRAMEBUFFER_HANDLE, width, height, WrapMode::REPEAT, WrapMode::REPEAT, FilterMode::LINEAR, true);
-    glViewport(0, 0, width, height);
+    resizeCurrentWindowFrameBuffer(width, height);
+    // todo(vk)
+    //glViewport(0, 0, width, height);
 
     MeshDataBuilder plane;
     plane.addSquare({}, {2, -2}, SignedAxis::ZN, 0);
     plane.setMaterial(Resource::getResource<MaterialTextured>("file://materials/splashscreen.json").castAssert<IMaterial>());
     plane.render(glm::identity<glm::mat4>());
 
-    glDisable(GL_DEPTH_TEST);
+    // todo(vk)
+    //glDisable(GL_DEPTH_TEST);
     Renderer::popFrameBuffer();
 
     MeshDataBuilder windowSurface;
@@ -160,8 +158,9 @@ bool Device::initBackendAndCreateSplashscreen(bool splashScreenVisible) {
     windowSurface.setMaterial(Resource::getResource<MaterialFrameBuffer>("file://materials/window.json", &WINDOW_FRAMEBUFFER_HANDLE).castAssert<IMaterial>());
     windowSurface.render(glm::identity<glm::mat4>());
 
-    glEnable(GL_DEPTH_TEST);
-    SDL_GL_SwapWindow(SPLASHSCREEN);
+    // todo(vk)
+    //glEnable(GL_DEPTH_TEST);
+    //SDL_GL_SwapWindow(SPLASHSCREEN);
 
     return true;
 }
@@ -174,9 +173,9 @@ void Device::destroySplashscreen() {
 }
 
 void Device::destroyBackend() {
-    ::destroyImGui();
+    destroyImGui();
     Device::destroyAllWindows();
-    SDL_GL_DeleteContext(GL_CONTEXT);
+    SDL_Vulkan_UnloadLibrary();
     SDL_Quit();
 }
 
@@ -216,7 +215,8 @@ static int findFreeWindow() {
         return nullptr;
     }
     SDL_SetWindowData(handle.window, "handle", &handle);
-    SDL_GL_MakeCurrent(handle.window, GL_CONTEXT);
+    // todo(vk)
+    //SDL_GL_MakeCurrent(handle.window, GL_CONTEXT);
 
     if (layer) {
         handle.layer = layer;
@@ -241,7 +241,7 @@ static int findFreeWindow() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad | ImGuiConfigFlags_DockingEnable;
     setImGuiConfigPath();
 
-    ::initImGui(handle.window, GL_CONTEXT);
+    initImGui(handle.window);
 
     auto defaultFont = Resource::getUniqueUncachedResource<Font>("file://fonts/default.json");
     io.FontDefault = defaultFont->getFont();
@@ -266,14 +266,15 @@ void Device::refreshWindows() {
             continue;
         }
 
-        SDL_GL_MakeCurrent(handle.window, GL_CONTEXT);
-        glViewport(0, 0, handle.width, handle.height);
+        // todo(vk)
+        //SDL_GL_MakeCurrent(handle.window, GL_CONTEXT);
+        //glViewport(0, 0, handle.width, handle.height);
 
         ImGui::SetCurrentContext(handle.imguiContext);
         setImGuiConfigPath();
 
         Renderer::pushFrameBuffer(*handle.layer->getRawHandle());
-        ::startImGuiFrame(handle.window);
+        startImGuiFrame(handle.window);
 
         handle.layer->update();
         handle.layer->render();
@@ -282,9 +283,10 @@ void Device::refreshWindows() {
             panel->render();
         }
 
-        glDisable(GL_DEPTH_TEST);
+        // todo(vk)
+        //glDisable(GL_DEPTH_TEST);
 
-        ::endImGuiFrame();
+        endImGuiFrame();
         Renderer::popFrameBuffer();
 
         MeshDataBuilder surface;
@@ -292,9 +294,10 @@ void Device::refreshWindows() {
         surface.setMaterial(Resource::getUniqueUncachedResource<MaterialFrameBuffer>("file://materials/window.json", handle.layer->getRawHandle()).castAssert<IMaterial>());
         surface.render(glm::identity<glm::mat4>());
 
-        glEnable(GL_DEPTH_TEST);
+        // todo(vk)
+        //glEnable(GL_DEPTH_TEST);
 
-        SDL_GL_SwapWindow(handle.window);
+        //SDL_GL_SwapWindow(handle.window);
     }
 
     // Process input

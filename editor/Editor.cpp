@@ -8,6 +8,7 @@
 #include <config/ConEntry.h>
 #include <core/Engine.h>
 #include <entity/Entity.h>
+#include <entity/Layer.h>
 #include <entity/component/CameraComponent.h>
 #include <entity/component/MeshComponent.h>
 #include <entity/component/MeshDynamicComponent.h>

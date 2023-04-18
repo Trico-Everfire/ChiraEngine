@@ -10,7 +10,7 @@
 
 struct SDL_Window;
 
-/// OpenGL 4.1 (or 4.3) render backend
+/// Vulkan render backend
 namespace chira::Renderer {
 
 struct TextureHandle {

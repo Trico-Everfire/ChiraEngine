@@ -5,11 +5,6 @@
 #include <stack>
 #include <string>
 
-#include <imgui.h>
-#include <SDL.h>
-#include <backends/imgui_impl_sdl2.h>
-#include <backends/imgui_impl_opengl3.h>
-
 #include <glm/gtc/type_ptr.hpp>
 #include <glad/gl.h>
 #include <glad/glversion.h>
@@ -95,7 +90,7 @@ std::string_view Renderer::getHumanName() {
 }
 
 bool Renderer::setupForDebugging() {
-#ifdef CHIRA_USE_GL_41
+#ifdef CHIRA_USE_RENDER_BACKEND_GL41
     if (!SDL_GL_ExtensionSupported("GL_KHR_debug"))
         return false;
 #endif
@@ -158,7 +153,7 @@ bool Renderer::setupForDebugging() {
     }, nullptr);
     glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
 
-    return IMGUI_CHECKVERSION();
+    return true;
 }
 
 void Renderer::setClearColor(ColorRGBA color) {
@@ -722,26 +717,4 @@ void Renderer::destroyMesh(MeshHandle handle) {
     glDeleteVertexArrays(1, &handle.vaoHandle);
     glDeleteBuffers(1, &handle.vboHandle);
     glDeleteBuffers(1, &handle.eboHandle);
-}
-
-void Renderer::initImGui(SDL_Window* window, void* context) {
-    ImGui_ImplSDL2_InitForOpenGL(window, context);
-    ImGui_ImplOpenGL3_Init(GL_VERSION_STRING.data());
-}
-
-void Renderer::startImGuiFrame(SDL_Window* window) {
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplSDL2_NewFrame(window);
-    ImGui::NewFrame();
-    ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), ImGuiDockNodeFlags_AutoHideTabBar | ImGuiDockNodeFlags_PassthruCentralNode);
-}
-
-void Renderer::endImGuiFrame() {
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-}
-
-void Renderer::destroyImGui() {
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
 }

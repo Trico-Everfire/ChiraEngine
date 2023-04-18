@@ -56,7 +56,19 @@ cmake_dependent_option(CHIRA_BUILD_WITH_PCH "Build Chira Engine with precompiled
 option(CHIRA_BUILD_WITH_WARNINGS "Build Chira Engine with warnings enabled" ON)
 option(CHIRA_TREAT_WARNINGS_AS_ERRORS "Build Chira Engine with warnings treated as errors" OFF)
 
-option(CHIRA_BUILD_HEADLESS "Build Chira Engine without any visible window(s). Zero reliance on SDL. Primarily for testing purposes." OFF)
+# Options:
+# - AUTO
+# - GL41
+# - GL43
+# - VK
+set(CHIRA_RENDER_BACKEND_OVERRIDE "AUTO" CACHE STRING "Override the render backend. If not specified, will choose the best backend for the current platform.")
+
+# todo(render): get rid of this variable, compile all backend types and run headless wth command line arg
+# Options:
+# - SDL
+# - HEADLESS
+set(CHIRA_RENDER_DEVICE_OVERRIDE "SDL" CACHE STRING "Change the device backend from SDL.")
+
 option(CHIRA_USE_DISCORD "Build Chira Engine with Discord rich presence features if possible" ON)
 option(CHIRA_USE_STEAMWORKS "Build Chira Engine with Steamworks API features if possible" ON)
 
@@ -71,7 +83,8 @@ message(STATUS "  CHIRA_BUILD_WITH_LTO: ${CHIRA_BUILD_WITH_LTO}")
 message(STATUS "  CHIRA_BUILD_WITH_PCH: ${CHIRA_BUILD_WITH_PCH}")
 message(STATUS "  CHIRA_BUILD_WITH_WARNINGS: ${CHIRA_BUILD_WITH_WARNINGS}")
 message(STATUS "  CHIRA_TREAT_WARNINGS_AS_ERRORS: ${CHIRA_TREAT_WARNINGS_AS_ERRORS}")
-message(STATUS "  CHIRA_BUILD_HEADLESS: ${CHIRA_BUILD_HEADLESS}")
+message(STATUS "  CHIRA_RENDER_BACKEND_OVERRIDE: ${CHIRA_RENDER_BACKEND_OVERRIDE}")
+message(STATUS "  CHIRA_RENDER_DEVICE_OVERRIDE: ${CHIRA_RENDER_DEVICE_OVERRIDE}")
 message(STATUS "  CHIRA_USE_DISCORD: ${CHIRA_USE_DISCORD}")
 message(STATUS "  CHIRA_USE_STEAMWORKS: ${CHIRA_USE_STEAMWORKS}")
 
@@ -190,42 +203,90 @@ list(APPEND IMGUI_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/imgui_widgets.cpp)
 
 
-# Figure out what render backend and device backend we are using
-if(CHIRA_BUILD_HEADLESS)
-    #todo(render): implement a headless mode for testing
-    #list(APPEND CHIRA_ENGINE_DEFINITIONS CHIRA_BUILD_HEADLESS)
-    message(FATAL_ERROR "Headless mode is not implemented yet!")
-else()
-    # The graphics API we use varies based on platform
-    # macOS: OpenGL 4.1
-    # Windows and Linux: OpenGL 4.3
-    if(APPLE)
-        set(GLAD_USE_GL_41 ON CACHE BOOL "" FORCE)
-        list(APPEND CHIRA_ENGINE_DEFINITIONS CHIRA_USE_GL_41)
-    else()
-        set(GLAD_USE_GL_41 OFF CACHE BOOL "" FORCE)
-        list(APPEND CHIRA_ENGINE_DEFINITIONS CHIRA_USE_GL_43)
-    endif()
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/glad)
-    list(APPEND CHIRA_ENGINE_DEFINITIONS IMGUI_IMPL_OPENGL_LOADER_GLAD2)
-    list(APPEND CHIRA_ENGINE_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/glad/include)
-    list(APPEND CHIRA_ENGINE_LINK_LIBRARIES glad)
-
+# Add device backends
+if(CHIRA_RENDER_DEVICE_OVERRIDE STREQUAL "SDL")
     # SDL2
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/sdl2)
     list(APPEND CHIRA_ENGINE_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/sdl2/include)
     list(APPEND CHIRA_ENGINE_LINK_LIBRARIES SDL2::SDL2)
 
-    # Add ImGui platform
     list(APPEND IMGUI_HEADERS
-            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_sdl2.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_opengl3.h)
+            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_sdl2.h)
     list(APPEND IMGUI_SOURCES
-            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_sdl2.cpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_opengl3.cpp)
+            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_sdl2.cpp)
     list(APPEND IMGUI_INCLUDE_DIRS
             ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/sdl2/include)
     list(APPEND IMGUI_LINK_LIBRARIES SDL2::SDL2)
+elseif(CHIRA_RENDER_DEVICE_OVERRIDE STREQUAL "HEADLESS")
+    # todo(render): headless mode
+    message(FATAL_ERROR "Headless mode is not implemented yet!")
+else()
+    message(FATAL_ERROR "Unrecognized render device ${CHIRA_RENDER_DEVICE_OVERRIDE}")
+endif()
+
+
+# Figure out what render backend we are using
+if(CHIRA_RENDER_BACKEND_OVERRIDE STREQUAL "AUTO")
+    if(WIN32 OR APPLE OR UNIX)
+        set(CHIRA_RENDER_BACKEND_OVERRIDE "VK")
+    else()
+        message(WARNING "Current platform has no default render backend! Defaulting to GL41 for max compatability...")
+        set(CHIRA_RENDER_BACKEND_OVERRIDE "GL41")
+    endif()
+endif()
+message(STATUS "Setting render backend to ${CHIRA_RENDER_BACKEND_OVERRIDE}")
+
+
+# Set up that backend
+if((CHIRA_RENDER_BACKEND_OVERRIDE STREQUAL "GL41") OR (CHIRA_RENDER_BACKEND_OVERRIDE STREQUAL "GL43"))
+    # macOS: OpenGL 4.1
+    # Windows and Linux: OpenGL 4.1 or OpenGL 4.3
+    list(APPEND CHIRA_ENGINE_DEFINITIONS CHIRA_USE_RENDER_BACKEND_GL)
+    if(APPLE AND CHIRA_RENDER_BACKEND_OVERRIDE STREQUAL "GL43")
+        message(WARNING "GL43 is not supported on Apple! Falling back to GL41...")
+        set(CHIRA_RENDER_BACKEND_OVERRIDE "GL41")
+    endif()
+
+    if(CHIRA_RENDER_BACKEND_OVERRIDE STREQUAL "GL43")
+        set(GLAD_USE_GL_41 OFF CACHE BOOL "" FORCE)
+        list(APPEND CHIRA_ENGINE_DEFINITIONS CHIRA_USE_RENDER_BACKEND_GL43)
+    else()
+        set(GLAD_USE_GL_41 ON CACHE BOOL "" FORCE)
+        list(APPEND CHIRA_ENGINE_DEFINITIONS CHIRA_USE_RENDER_BACKEND_GL41)
+    endif()
+
+    # OPENGL
+    find_package(OpenGL REQUIRED)
+
+    # GLAD
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/glad)
+    list(APPEND CHIRA_ENGINE_DEFINITIONS IMGUI_IMPL_OPENGL_LOADER_GLAD2)
+    list(APPEND CHIRA_ENGINE_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/glad/include)
+    list(APPEND CHIRA_ENGINE_LINK_LIBRARIES glad)
+
+    # Add ImGui platform
+    list(APPEND IMGUI_HEADERS
+            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_opengl3.h)
+    list(APPEND IMGUI_SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_opengl3.cpp)
+
+elseif(CHIRA_RENDER_BACKEND_OVERRIDE STREQUAL "VK")
+    list(APPEND CHIRA_ENGINE_DEFINITIONS CHIRA_USE_RENDER_BACKEND_VK)
+
+    # VULKAN
+    find_package(Vulkan REQUIRED)
+    list(APPEND CHIRA_ENGINE_INCLUDE_DIRS ${Vulkan_INCLUDE_DIRS})
+    list(APPEND CHIRA_ENGINE_LINK_LIBRARIES ${Vulkan_LIBRARIES})
+
+    # Add ImGui platform
+    list(APPEND IMGUI_HEADERS
+            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_vulkan.h)
+    list(APPEND IMGUI_SOURCES
+            ${CMAKE_CURRENT_SOURCE_DIR}/engine/thirdparty/imgui/backends/imgui_impl_vulkan.cpp)
+    list(APPEND IMGUI_INCLUDE_DIRS
+            ${Vulkan_INCLUDE_DIRS})
+else()
+    message(FATAL_ERROR "Unrecognized render backend ${CHIRA_RENDER_BACKEND_OVERRIDE}")
 endif()
 
 

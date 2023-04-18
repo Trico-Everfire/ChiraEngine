@@ -1,8 +1,9 @@
 #pragma once
 
-#ifndef CHIRA_BUILD_HEADLESS
+#if defined(CHIRA_USE_RENDER_BACKEND_GL)
     #include "device/DeviceGL.h"
+#elif defined(CHIRA_USE_RENDER_BACKEND_VK)
+    #include "device/DeviceVK.h"
 #else
-    //todo(render): implement a headless mode for testing
-    #error "Headless mode is not implemented yet."
+    #error "No render device present!"
 #endif
