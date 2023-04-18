@@ -89,6 +89,8 @@ void destroyImGui() {
 } // namespace
 
 SDL_Window* SPLASHSCREEN = nullptr;
+VkInstance VK_INSTANCE;
+VkDevice VK_DEVICE;
 
 bool Device::initBackendAndCreateSplashscreen(bool splashScreenVisible) {
     static bool alreadyRan = false;
@@ -119,23 +121,92 @@ bool Device::initBackendAndCreateSplashscreen(bool splashScreenVisible) {
             (splashScreenVisible ? SDL_WINDOW_SHOWN : SDL_WINDOW_HIDDEN);
     int width = 640, height = 480;
 
-    // todo(vk)
-    /*
-    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    */
-
     // todo(config): this should use the game name
     SPLASHSCREEN = SDL_CreateWindow("Chira Engine - Loading", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, windowFlags);
     if (!SPLASHSCREEN) {
         LOG_WINDOW.error("Splashscreen window creation failed! Error: {}", SDL_GetError());
         return false;
     }
+
+    uint32_t extensionCount;
+    SDL_Vulkan_GetInstanceExtensions(SPLASHSCREEN, &extensionCount, nullptr);
+    std::vector<const char*> extensionNames;
+    extensionNames.resize(extensionCount);
+    SDL_Vulkan_GetInstanceExtensions(SPLASHSCREEN, &extensionCount, extensionNames.data());
+    const VkInstanceCreateInfo instInfo = {
+            VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, // sType
+            nullptr,                                // pNext
+            0,                                      // flags
+            nullptr,                                // pApplicationInfo
+            0,                                      // enabledLayerCount
+            nullptr,                                // ppEnabledLayerNames
+            extensionCount,                         // enabledExtensionCount
+            extensionNames.data(),                  // ppEnabledExtensionNames
+    };
+    //VkInstance vkInst;
+    vkCreateInstance(&instInfo, nullptr, &VK_INSTANCE);
+
+    uint32_t physicalDeviceCount;
+    vkEnumeratePhysicalDevices(VK_INSTANCE, &physicalDeviceCount, nullptr);
+    std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
+    vkEnumeratePhysicalDevices(VK_INSTANCE, &physicalDeviceCount, physicalDevices.data());
+    VkPhysicalDevice physicalDevice = physicalDevices[0];
+
+    uint32_t queueFamilyCount;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
+
+    VkSurfaceKHR surface;
+    SDL_Vulkan_CreateSurface(SPLASHSCREEN, VK_INSTANCE, &surface);
+
+    uint32_t graphicsQueueIndex = UINT32_MAX;
+    uint32_t presentQueueIndex = UINT32_MAX;
+    VkBool32 support;
+    uint32_t i = 0;
+    for (VkQueueFamilyProperties queueFamily : queueFamilies) {
+        if (graphicsQueueIndex == UINT32_MAX && queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            graphicsQueueIndex = i;
+        if (presentQueueIndex == UINT32_MAX) {
+            vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &support);
+            if(support)
+                presentQueueIndex = i;
+        }
+        ++i;
+    }
+
+    float queuePriority = 1.0f;
+    VkDeviceQueueCreateInfo queueInfo = {
+            VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO, // sType
+            nullptr,                                    // pNext
+            0,                                          // flags
+            graphicsQueueIndex,                         // graphicsQueueIndex
+            1,                                          // queueCount
+            &queuePriority,                             // pQueuePriorities
+    };
+
+    VkPhysicalDeviceFeatures deviceFeatures = {};
+    const char* deviceExtensionNames[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    VkDeviceCreateInfo createInfo = {
+            VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,   // sType
+            nullptr,                                // pNext
+            0,                                      // flags
+            1,                                      // queueCreateInfoCount
+            &queueInfo,                             // pQueueCreateInfos
+            0,                                      // enabledLayerCount
+            nullptr,                                // ppEnabledLayerNames
+            1,                                      // enabledExtensionCount
+            deviceExtensionNames,                   // ppEnabledExtensionNames
+            &deviceFeatures,                        // pEnabledFeatures
+    };
+    //VkDevice device;
+    vkCreateDevice(physicalDevice, &createInfo, nullptr, &VK_DEVICE);
+
+    VkQueue graphicsQueue;
+    vkGetDeviceQueue(VK_DEVICE, graphicsQueueIndex, 0, &graphicsQueue);
+
+    VkQueue presentQueue;
+    vkGetDeviceQueue(VK_DEVICE, presentQueueIndex, 0, &presentQueue);
 
     setVSync(win_vsync.getValue<bool>());
 
@@ -175,6 +246,8 @@ void Device::destroySplashscreen() {
 void Device::destroyBackend() {
     destroyImGui();
     Device::destroyAllWindows();
+    vkDestroyDevice(VK_DEVICE, nullptr);
+    vkDestroyInstance(VK_INSTANCE, nullptr);
     SDL_Vulkan_UnloadLibrary();
     SDL_Quit();
 }
